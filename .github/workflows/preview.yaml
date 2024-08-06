@@ -1,0 +1,41 @@
+name: Vercel Preview Deployment
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+on:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  Deploy-Preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Deploy to Vercel
+        id: deploy
+        run: |
+          # url=$(vercel --yes --token=${{ secrets.VERCEL_TOKEN }})
+          # echo $url
+          # echo "::set-output name=vercel_url::$url"
+          echo ${{ github.event_name }}
+
+      # - name: Post Vercel Preview URL to PR
+      #   if: github.event_name == 'pull_request'
+      #   uses: actions/github-script@v6
+      #   with:
+      #     github-token: ${{ secrets.GITHUB_TOKEN }}
+      #     script: |
+      #       const url = "${{ steps.deploy.outputs.vercel_url }}";
+      #       github.rest.issues.createComment({
+      #         owner: context.repo.owner,
+      #         repo: context.repo.repo,
+      #         issue_number: context.payload.pull_request.number,
+      #         body: `The preview URL is: ${url}`
+      #       });
