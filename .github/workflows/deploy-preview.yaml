@@ -1,0 +1,112 @@
+name: Deploy preview
+
+on:
+  push:
+    branches:
+      - "*"
+      - "!main"
+
+env:
+  ENV_NAME: preview-${{ github.ref_name }}
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+    outputs:
+      url: ${{ steps.deploy-url.outputs.url }}
+    steps:
+      - name: Start deployment
+        uses: bobheadxi/deployments@v1
+        id: deployment
+        with:
+          step: start
+          token: ${{ github.token }}
+          env: ${{ env.ENV_NAME }}
+      - uses: actions/checkout@v4
+      - name: Deploy to Vercel
+        id: deploy-url
+        run: |
+          npm i -g vercel@latest
+          url="$(vercel --yes --token=${{ secrets.VERCEL_TOKEN }})"
+          echo "url=$url" >> $GITHUB_OUTPUT
+      - name: Update deployment status
+        uses: bobheadxi/deployments@v1
+        if: always()
+        with:
+          step: finish
+          token: ${{ github.token }}
+          status: ${{ job.status }}
+          env: ${{ steps.deployment.outputs.env }}
+          env_url: ${{ steps.deploy-url.outputs.url }}
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
+
+  check-if-pr-exists:
+    needs: deploy
+    name: Check if associated PR exists
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      pr-number: ${{ steps.get-pr-number.outputs.pr-number }}
+    steps:
+      - name: Get associated PRs
+        id: prs
+        run: >
+          echo "pulls=$(gh api -H "Accept: application/vnd.github.v3+json" -X GET
+          /repos/${{ github.repository }}/pulls
+          -f state=open
+          -f head=${{ github.repository_owner }}:${{ github.ref_name }})" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Get PR number
+        id: get-pr-number
+        run: |
+          if [ "${{ fromJSON(env.PULL) }}" ]; then
+            echo "pr-number=${{ fromJSON(env.PULL).number }}" >> $GITHUB_OUTPUT;
+          else
+            echo "pr-number=0" >> $GITHUB_OUTPUT;
+          fi
+        env:
+          PULL: ${{ toJSON(fromJSON(steps.prs.outputs.pulls)[0]) }}
+
+  comment:
+    needs:
+      - deploy
+      - check-if-pr-exists
+    name: Comment on PR
+    if: needs.check-if-pr-exists.outputs.pr-number != 0
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Find Comment
+        uses: peter-evans/find-comment@v3
+        id: fc
+        with:
+          issue-number: ${{ needs.check-if-pr-exists.outputs.pr-number }}
+          comment-author: github-actions[bot]
+          body-includes: preview
+      - name: Get datetime for now
+        id: datetime
+        run: echo "value=$(date)" >> $GITHUB_OUTPUT
+        env:
+          TZ: Asia/Tokyo
+      - name: Create or update comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ needs.check-if-pr-exists.outputs.pr-number }}
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          body: |
+            Visit the preview for this PR
+            ${{ needs.deploy.outputs.url }}
+
+            updated for commit ${{ github.sha }}
+            updated at ${{ steps.datetime.outputs.value }})
+          edit-mode: replace
