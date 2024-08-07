@@ -1,0 +1,77 @@
+name: Comment on PR about deployment
+
+on:
+  pull_request:
+    types:
+      - opened
+
+env:
+  ENV_NAME: preview-${{ github.head_ref }}
+
+jobs:
+  check-if-deployment-exists:
+    name: Check if a successful deployment exists
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      state: ${{ steps.get-status.outputs.state }}
+      url: ${{ steps.get-status.outputs.url }}
+    steps:
+      - name: Get associated deployments
+        id: get-deployments
+        run: >
+          echo "deployments=$(gh api -H "Accept: application/vnd.github.v3+json"
+          /repos/${{ github.repository }}/deployments?environment=${{ env.ENV_NAME }})" >> $GITHUB_OUTPUT
+      - name: Get statuses of the deployment
+        id: get-statuses
+        run: >
+          echo "statuses=$(gh api -H "Accept: application/vnd.github.v3+json"
+          /repos/${{ github.repository }}/deployments/${{ env.DEP_ID }}/statuses)" >> $GITHUB_OUTPUT
+        env:
+          DEP_ID: ${{ fromJSON(steps.get-deployments.outputs.deployments)[0].id }}
+      - name: Get latest status of the deployment
+        id: get-status
+        run: |
+          echo "state=${{ fromJSON(env.STATUS).state }}" >> $GITHUB_OUTPUT
+          echo "url=${{ fromJSON(env.STATUS).environment_url }}" >> $GITHUB_OUTPUT
+        env:
+          STATUS: ${{ toJSON(fromJSON(steps.get-statuses.outputs.statuses)[0]) }}
+
+  comment:
+    needs: check-if-deployment-exists
+    name: Comment on PR
+    if: needs.check-if-deployment-exists.outputs.state != null
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Get datetime for now
+        id: datetime
+        run: echo "value=$(date)" >> $GITHUB_OUTPUT
+        env:
+          TZ: Asia/Tokyo
+      - name: Comment on PR if the deployment has completed
+        if: needs.check-if-deployment-exists.outputs.state == 'success'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            Visit the preview for this PR
+            ${{ needs.deploy.outputs.url }}
+
+            updated for commit ${{ github.sha }}
+            updated at ${{ steps.datetime.outputs.value }})
+      - name: Create comment if the deployment has not completed
+        if: needs.check-if-deployment-exists.outputs.state == 'in_progress'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            preview deployment is ongoing...
