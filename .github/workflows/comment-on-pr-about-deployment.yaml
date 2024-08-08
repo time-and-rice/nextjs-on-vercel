@@ -6,7 +6,7 @@ on:
       - opened
 
 env:
-  ENV_NAME: preview-${{ github.head_ref }}
+  ENV_NAME: ${{ github.head_ref }}
 
 jobs:
   check-if-deployment-exists:
