@@ -1,0 +1,28 @@
+name: Preview url comment
+
+on:
+  pull_request:
+    types:
+      - opened
+
+jobs:
+  Comment:
+    name: Comment
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Get alias url
+        id: alias
+        run: |
+          REPOSITORY_NAME=$(echo ${GITHUB_REPOSITORY#${GITHUB_REPOSITORY_OWNER}/} | sed -e 's/\//\-/g' | sed -e 's/[^0-9a-zA-Z\-]//g' | sed -e 's/\-research//g')
+          BRANCH_NAME=$(echo ${GITHUB_REF_NAME} | sed -e 's/\//\-/g' | sed -e 's/[^0-9a-zA-Z\-]//g')
+          ALIAS_URL="${REPOSITORY_NAME,,}-git-${BRANCH_NAME,,}-pf.vercel.app"
+          echo "alias_url=$ALIAS_URL" >> $GITHUB_OUTPUT
+      - name: Comment on PR
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            Visit the preview for this PR
+            https://${{ steps.alias.outputs.alias_url }}
