@@ -5,8 +5,8 @@ on:
     types:
       - opened
 
-env:
-  ENV_NAME: preview-${{ github.head_ref }}
+# env:
+#   ENV_NAME: preview-${{ github.head_ref }}
 
 jobs:
   check-if-deployment-exists:
@@ -24,7 +24,7 @@ jobs:
         id: get-deployments
         run: >
           echo "deployments=$(gh api -H "Accept: application/vnd.github.v3+json"
-          /repos/${{ github.repository }}/deployments?environment=${{ env.ENV_NAME }})" >> $GITHUB_OUTPUT
+          /repos/${{ github.repository }}/deployments?environment=${{ github.head_ref }})" >> $GITHUB_OUTPUT
       - name: Get statuses of the deployment
         id: get-statuses
         run: >
